@@ -107,25 +107,34 @@ async function runTask() {
     addLog("开始执行挂号...");
     taskState.lastRunTime = getBeijingTime().toLocaleString('zh-CN');
 
-    // ====================== 挂号日期：按北京时间算 7 天后 ======================
     const now = getBeijingTime();
     const next = new Date(now.getTime() + 7 * 86400000);
     const queryDate = next.toISOString().split('T')[0];
-    // ======================================================================
+    addLog("准备查询日期：" + queryDate);
 
+    // ==== 第一步加密 ====
+    addLog("步骤1：生成加密参数...");
     const req1 = encrypt(JSON.stringify([configs.orgId, deptConfig.regDeptId, queryDate]));
+
+    // ==== 第二步请求排班 ====
+    addLog("步骤2：请求医院排班接口...");
     const res1 = await axiosInstance({
       url: 'https://wx.weisheng.com/hcn-web/*.jsonRequest',
       method: 'post',
       headers: { 'X-Service-Method': 'getAllRegPlanList' },
       data: req1[1]
     });
+    addLog("步骤2 接口返回：" + JSON.stringify(res1.data || {}).substr(0, 200));
 
     if (!res1?.data?.body?.length) {
       throw new Error("无排班");
     }
 
+    // ==== 第三步解密 ====
+    addLog("步骤3：解密返回数据...");
     const data = JSON.parse(deEncrypt(req1[0], res1.data.body));
+    addLog("解析到医生数量：" + data.length);
+
     const doctor = data[0];
     if (!doctor || !doctor.morningOdsRegplanList.length) {
       throw new Error("无排班信息");
@@ -133,7 +142,10 @@ async function runTask() {
 
     const target = doctor.morningOdsRegplanList.find(e => e.count !== 0);
     if (!target) throw new Error("号满");
+    addLog("找到可挂号：" + target.workId);
 
+    // ==== 第四步提交挂号 ====
+    addLog("步骤4：提交挂号...");
     const params = [{
       address: deptConfig.deptAddress,
       appId: "wx8ba68d68231db986",
@@ -183,7 +195,10 @@ async function runTask() {
     return true;
 
   } catch (err) {
+    // 这里会打印完整错误
     addLog("❌ 失败：" + err.message);
+    addLog("❌ 详细堆栈：" + (err.stack || '无'));
+    console.error("完整错误", err); // 也输出到控制台日志
     return false;
   }
 }
