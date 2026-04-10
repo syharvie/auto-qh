@@ -50,6 +50,15 @@ let taskState = {
   log: []
 };
 
+// ====================== 【核心：获取北京时间】======================
+function getBeijingTime() {
+  const now = new Date();
+  const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const beijingOffset = 8 * 3600000; // 东八区
+  return new Date(utcTime + beijingOffset);
+}
+// ===============================================================
+
 function genKey(e) {
   let n = "";
   const r = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -85,25 +94,24 @@ function deEncrypt(key, content) {
 
 // 日志同时写入内存 + 文件
 function addLog(msg) {
-  const time = new Date().toLocaleString();
+  const time = getBeijingTime().toLocaleString('zh-CN'); // 用北京时间
   const line = `[${time}] ${msg}`;
 
-  // 内存日志
   taskState.log.unshift(line);
   if (taskState.log.length > 50) taskState.log.pop();
-
-  // 写入文件
   fs.appendFileSync(LOG_FILE, line + '\r\n', 'utf8');
 }
 
 async function runTask() {
   try {
     addLog("开始执行挂号...");
-    taskState.lastRunTime = new Date().toLocaleString();
+    taskState.lastRunTime = getBeijingTime().toLocaleString('zh-CN');
 
-    const now = new Date();
+    // ====================== 挂号日期：按北京时间算 7 天后 ======================
+    const now = getBeijingTime();
     const next = new Date(now.getTime() + 7 * 86400000);
     const queryDate = next.toISOString().split('T')[0];
+    // ======================================================================
 
     const req1 = encrypt(JSON.stringify([configs.orgId, deptConfig.regDeptId, queryDate]));
     const res1 = await axiosInstance({
@@ -180,15 +188,17 @@ async function runTask() {
   }
 }
 
+// ====================== 【核心：按北京时间计算下次运行】======================
 function getNextRunTime(success) {
-  const now = new Date();
-  const day = now.getDay();
+  const now = getBeijingTime();
+  const day = now.getDay(); // 0=周日,1=周一,2=周二,3=周三...
+
   const base = new Date(now);
-  base.setHours(9, 0, 1, 0);
+  base.setHours(9, 0, 1, 0); // 固定北京时间早上9:00执行
 
   let next;
 
-  if (day === 1) {
+  if (day === 1) { // 周一
     if (success) {
       next = new Date(base);
       next.setDate(base.getDate() + 9);
@@ -196,7 +206,7 @@ function getNextRunTime(success) {
       next = new Date(base);
       next.setDate(base.getDate() + 2);
     }
-  } else if (day === 3) {
+  } else if (day === 3) { // 周三
     if (success) {
       next = new Date(base);
       next.setDate(base.getDate() + 11);
@@ -214,24 +224,25 @@ function getNextRunTime(success) {
 
   return next;
 }
+// ======================================================================
 
 function startTask() {
   if (taskState.timer) clearTimeout(taskState.timer);
 
   const next = getNextRunTime(false);
-  taskState.nextRunTime = next.toLocaleString();
+  taskState.nextRunTime = next.toLocaleString('zh-CN');
   taskState.running = true;
 
-  const delay = next - new Date();
-  addLog("任务已启动，下次执行：" + taskState.nextRunTime);
+  const delay = next - getBeijingTime();
+  addLog("任务已启动，下次执行（北京时间）：" + taskState.nextRunTime);
 
   taskState.timer = setTimeout(async () => {
     const success = await runTask();
     taskState.lastRunResult = success ? "成功" : "失败";
 
     const nextTime = getNextRunTime(success);
-    taskState.nextRunTime = nextTime.toLocaleString();
-    taskState.timer = setTimeout(startTask, nextTime - new Date());
+    taskState.nextRunTime = nextTime.toLocaleString('zh-CN');
+    taskState.timer = setTimeout(startTask, nextTime - getBeijingTime());
 
   }, delay);
 }
@@ -265,6 +276,5 @@ const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`服务已启动：http://localhost:${port}`);
   addLog("服务启动");
-  // 默认不自动运行
   stopTask();
 });
