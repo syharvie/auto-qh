@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>自动挂号后台</title>
+  <style>
+    body{max-width:600px;margin:20px auto;font-family:微软雅黑}
+    .status{padding:15px;border:1px solid #ddd;margin:10px 0}
+    .log{background:#f5f5f5;padding:10px;height:300px;overflow-y:auto}
+    button{padding:10px 20px;margin:5px}
+    .green{color:green}
+    .red{color:red}
+  </style>
+</head>
+<body>
+  <h2>自动挂号服务</h2>
+  <div class="status">
+    状态：<span id="state">-</span><br>
+    下次执行：<span id="next">-</span><br>
+    最后执行：<span id="last">-</span><br>
+    结果：<span id="result">-</span>
+  </div>
+
+  <button onclick="start()">启动任务</button>
+  <button onclick="stop()">停止任务</button>
+  <button onclick="run()">立即执行一次</button>
+
+  <h3>执行日志</h3>
+  <div class="log" id="log"></div>
+
+  <script>
+    async function load(){
+      const res = await fetch('/status');
+      const data = await res.json();
+      document.getElementById('state').innerHTML = data.running ? '<span class=green>运行中</span>' : '<span class=red>已停止</span>';
+      document.getElementById('next').innerText = data.nextRunTime || '-';
+      document.getElementById('last').innerText = data.lastRunTime || '-';
+      document.getElementById('result').innerText = data.lastRunResult || '-';
+      document.getElementById('log').innerText = data.log.join('\n');
+    }
+
+    async function start(){ await fetch('/start'); load(); }
+    async function stop(){ await fetch('/stop'); load(); }
+    async function run(){ await fetch('/run'); load(); }
+
+    setInterval(load, 2000);
+    load();
+  </script>
+</body>
+</html>
